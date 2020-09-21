@@ -176,5 +176,13 @@ filter(n ==max(n),started_at >= "2020-01-01") %>%
   count(started_at) %>% 
   arrange(desc(n))
 
-common_peak_dates %>% gt()
-                               
+
+
+
+# Most common day where stations recorded their peak use in 2020 so far.
+common_peak_dates %>% gt(rowname_col = "row") %>% cols_label(
+  started_at = "Date",
+  n = "Stations"
+)
+                              
+
