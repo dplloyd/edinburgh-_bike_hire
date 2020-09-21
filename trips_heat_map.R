@@ -14,7 +14,7 @@
 ##
 ## Notes:
 ##   
-##
+## Heatmap of Edinburgh Bke Share checkouts in 2020. Those stations with no checkouts in hte latest available week are not included.
 ## ---------------------------
 
 
@@ -23,6 +23,7 @@ library(tidyverse)
 library(httr)
 library(jsonlite)
 library(lubridate)
+library(cowplot)
 
 
 # Bike trip data, updated daily 
@@ -81,21 +82,64 @@ trips <- data_trips %>%
 
 
 # Add a new variable which has just the month and the year
-trips <- trips %>% mutate(month_year = floor_date(date_started,"month"))
+trips <- trips %>% mutate(month_year = floor_date(date_started,"month")) %>% 
+  filter(month_year > as.Date("2019-12-31"))
+
+
+
+# Set some theme elements common to the next set of plots
+my_theme <- theme(line = element_blank(),
+      text = element_blank(),
+      title = element_blank(),
+      legend.position = "none",
+      panel.background = element_rect(fill = "white") )
+
 
 cycle_tiles <- trips %>% 
   group_by(start_station_name) %>% 
   filter(any(date_started == max(trips$date_started))) %>% 
   ggplot(aes(x = date_started, y = fct_reorder(start_station_name,total_outward_trips), fill=n_outward_trips)) +
   geom_tile(colour = "white", show.legend = TRUE) +
-  scale_fill_distiller(palette="Spectral")+
-  scale_y_discrete(name="", expand=c(0,0))+
-  theme_classic()
+  scale_fill_distiller(palette = "Spectral") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "3 months") +
+  theme(axis.line.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(colour = "black"),
+        legend.position = "none",
+        panel.background = element_rect(fill = "white"),
+        axis.text.y = element_text(size = 12) ,
+        title = element_text(size = 12)) +
+  xlab("date") +
+  labs(title="Edinburgh bike share checkouts by station, 2020",
+      subtitle="Counts are for bike checkouts only, and stations with no rentals in the latest available data not shown.",
+      caption="Data from https://edinburghcyclehire.com/open-data/historical. Plot by @diarmuidlloyd, but heavily based on @VictimOfMaths COVID-19 heatmaps, available at https://github.com/VictimOfMaths/COVID-19")
 
 cycle_tiles 
 
-trips %>% 
-  group_by(start_station_name) %>% filter(date_started == max(date_started)) %>% 
-  ggplot(aes(x = total_outward_trips, y = fct_reorder(start_station_name,total_outward_trips))) +
-  geom_col()
+
+cycle_bars <- trips %>% group_by(start_station_name) %>% 
+  filter(any(date_started == max(trips$date_started))) %>% 
+  summarise(max_n_trips = max(n_outward_trips),  total_outward_trips = max(total_outward_trips))  %>% 
+  group_by(start_station_name) %>% 
+  ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = max_n_trips)) +
+  geom_col() + 
+  coord_flip() +
+scale_fill_distiller(palette = "Spectral")  +
+  theme(axis.line.x = element_line(colour = "black"),
+        axis.ticks = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y =  element_blank(),
+        legend.position = "none",
+        panel.background = element_rect(fill = "white") ,
+        plot.margin = margin(0, 0, 0, 0, "cm") ) +
+  ylab("Maximum hires in a week")
+
+cycle_bars
+
+
   
+png("output/Edinburgh_weekly_bike_rentals_checkouts_2020.png", units="cm", width=45, height=45, res=500)
+plot_grid(cycle_tiles,cycle_bars, align="h", rel_widths=c(1,0.2))
+dev.off()
+           
