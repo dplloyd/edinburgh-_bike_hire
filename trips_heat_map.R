@@ -111,6 +111,7 @@ trips <-  trips %>% group_by(start_station_name) %>%
 
 colour_limit <- c(1,400)
 
+
 cycle_tiles <- trips %>% 
   group_by(start_station_name) %>% 
   filter(any( date_started == max(trips$date_started) & !is.na(n_outward_trips == TRUE) )) %>% 
