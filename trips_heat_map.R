@@ -32,6 +32,7 @@ library(gt)
 
 # Bike trip data, updated daily 
 dataPaths <- c(
+  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/10.json",
   "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/09.json",
   "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/08.json",
   "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/07.json",
@@ -59,6 +60,11 @@ dataPaths <- c(
   "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2018/09.json"
 )
 
+# Date ranges ----
+lower_date_cutoff <- as.Date("2019-12-31")
+
+
+## OPTIONAL ------
 ## Run if the first time, or if updating. If not, comment out and read in tehe locally saved csv instead.
 #Read in the data. Warning - this file is huge, around 70MB in September 2020.
 # tictoc::tic()
@@ -70,11 +76,11 @@ dataPaths <- c(
 # data <- data %>% mutate(started_at = as.Date(started_at) , ended_at = as.Date(ended_at))
 # #Sort text to factors.
 # data <- data %>% mutate(start_station_name =  as_factor(start_station_name), end_station_name = as_factor(end_station_name))
+# 
+# #Write the data for local reading - just a convenience if needed down the line
+# write_csv(data, "data/cycle_hire_data.csv")
 
-#Write the data for local reading - just a convenience if needed down the line
-write_csv(data, "data/cycle_hire_data.csv")
-
-
+## Reading data and counting trips -----
 data <- read_csv("data/cycle_hire_data.csv")
 
 # Select variables of interest.
@@ -97,9 +103,9 @@ trips <- trips %>%
   group_by(start_station_name) %>% 
   complete(trip_week = full_date_range)
 
-# Add a new variable which has just the month and the year. Note sure why I added this!
-#trips <- trips %>% 
- # filter(trip_week > as.Date("2019-12-31"))
+# Filter date range of interest.
+trips <- trips %>%
+filter(trip_week > lower_date_cutoff)
   
 #this results in total_outward_trips being NA for the missing dates, whcih causes problems down the line. So,
 # set the NAs to the station's total trips
@@ -130,7 +136,7 @@ cycle_tiles <- trips_to_plot %>% filter(start_station_name != "Total") %>%
   ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= n_outward_trips)) +
   geom_tile(colour = "white", show.legend = TRUE) +
   scale_fill_distiller(palette = "Spectral",na.value = "gray95", limits =c(1,max(trips$n_outward_trips,na.rm = TRUE))) +
-  scale_x_date(date_labels = "%b %Y", date_breaks = "month") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "month",sec.axis = dup_axis()) +
   theme(axis.line.y = element_blank(),
         axis.title.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -160,7 +166,7 @@ cycle_bars <- trips_to_plot %>%
   geom_col() + 
   coord_flip() +
   scale_fill_distiller(palette = "Spectral")  +
-  scale_y_continuous(breaks = pretty(trips$total_outward_trips,n=100) )+
+  scale_y_continuous(breaks = pretty(trips$total_outward_trips,n=100),sec.axis = dup_axis() )+
   theme(axis.line.x = element_line(colour = "black"),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
@@ -188,7 +194,7 @@ cycle_tiles_peakprop <- trips_to_plot %>%
   ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= prop_of_weekly_max)) +
   geom_tile(colour = "white", show.legend = TRUE) +
   scale_fill_distiller(palette = "Spectral",na.value = "gray95") +
-  scale_x_date(date_labels = "%b %Y", date_breaks = "month") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "month",sec.axis = dup_axis()) +
   theme(axis.line.y = element_blank(),
         axis.title.y = element_blank(),
         axis.ticks.y = element_blank(),
@@ -209,14 +215,16 @@ cycle_tiles_peakprop
 # Barplot - peak rental value in time series, total of all stations set to zero   -----------------------------
 
 cycle_bars_total_zero <- trips_to_plot %>% 
-  mutate(total_outward_trips = ifelse(start_station_name == "Total",0,total_outward_trips)) %>% 
-  summarise(max_n_trips = max(n_outward_trips, na.rm = TRUE),  total_outward_trips = max(total_outward_trips))  %>% 
+  mutate(total_outward_trips_adj = ifelse(start_station_name == "Total",0,total_outward_trips)) %>% 
+  summarise(max_n_trips = max(n_outward_trips, na.rm = TRUE),  
+            total_outward_trips_adj = max(total_outward_trips_adj),
+            total_outward_trips = max(total_outward_trips))  %>% 
   group_by(start_station_name) %>% 
-  ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = max_n_trips)) +
+  ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = log10(max_n_trips))) +
   geom_col() + 
   coord_flip() +
   scale_fill_distiller(palette = "Spectral")  +
-  scale_y_continuous(breaks = pretty(trips$total_outward_trips,n=100) )+
+  scale_y_continuous(trans = "log10" ,sec.axis = dup_axis())+
   theme(axis.line.x = element_line(colour = "black"),
         axis.ticks.y = element_blank(),
         axis.title.y = element_blank(),
@@ -245,7 +253,7 @@ dev.off()
 
 
 
-## Sanity check
+## Sanity check -----
 
 # Check some gaps. Not sure they are correct.
 trips_to_plot %>% filter(start_station_name == "Cramond Foreshore", trip_week > "2020-02-01") %>% filter(is.na(n_outward_trips) == TRUE)
