@@ -18,7 +18,7 @@
 ## shows the peak number of rentals in a week in 2020, and stations sorted in descending order for total bike checkouts in 2020.
 ##
 ## This script is heavily based on @VictimOfMaths' COVI19 heatmaps, available here: https://github.com/VictimOfMaths/COVID-19
-## ---------------------------
+#--------
 
 
 ## Packages
@@ -70,9 +70,9 @@ dataPaths <- c(
 # data <- data %>% mutate(started_at = as.Date(started_at) , ended_at = as.Date(ended_at))
 # #Sort text to factors.
 # data <- data %>% mutate(start_station_name =  as_factor(start_station_name), end_station_name = as_factor(end_station_name))
-# 
-# #Write the data for local reading - just a convenience if needed down the line
-# write_csv(data, "data/cycle_hire_data.csv")
+
+#Write the data for local reading - just a convenience if needed down the line
+write_csv(data, "data/cycle_hire_data.csv")
 
 
 data <- read_csv("data/cycle_hire_data.csv")
@@ -82,26 +82,24 @@ data_trips <- data %>% select(c("started_at","ended_at","duration","start_statio
 
 # Count up the number of started at trips for each day, plus the total number of trips for each station
 trips <- data_trips %>% 
-  group_by(start_station_name,date_started = floor_date(started_at, "week")) %>% 
-  count(date_started, name = "n_outward_trips") %>% 
+  group_by(start_station_name) %>% 
+  mutate(trip_week = floor_date(started_at, "week")) %>% 
+  count(trip_week, name = "n_outward_trips") %>% 
   group_by(start_station_name) %>% 
   mutate(total_outward_trips = max(cumsum(n_outward_trips)))
 
 #create the heatmap. 
 
-# I want implicit missing values to be explicitly missing, so that geom_tile below can show a colour for 0 cases.
-full_date_range <- seq.Date(as.Date("2020-01-05"),as.Date("2020-09-13"),by = 7)
+# I want implicit missing values to be explicitly missing, so that geom_tile can show a gray tile for NA cases, rather than just an empty tile.
+full_date_range <- seq.Date(as.Date(min(trips$trip_week)),as.Date(max(trips$trip_week)),by = 7)
 
 trips <- trips %>% 
   group_by(start_station_name) %>% 
-  complete(date_started = full_date_range)
+  complete(trip_week = full_date_range)
 
-# Add a new variable which has just the month and the year
-trips <- trips %>% mutate(month_year = floor_date(date_started,"month")) %>% 
-  filter(month_year > as.Date("2019-12-31"))
-
-trips %>% group_by(start_station_name) %>% 
-  filter(any((date_started == max(trips$date_started)) & (!is.na(date_started == TRUE) )))
+# Add a new variable which has just the month and the year. Note sure why I added this!
+#trips <- trips %>% 
+ # filter(trip_week > as.Date("2019-12-31"))
   
 #this results in total_outward_trips being NA for the missing dates, whcih causes problems down the line. So,
 # set the NAs to the station's total trips
@@ -109,13 +107,27 @@ trips <-  trips %>% group_by(start_station_name) %>%
   mutate(total_outward_trips = max(total_outward_trips, na.rm = TRUE))
 
 
-colour_limit <- c(1,400)
+# I want to know the sum total of trips each week.
+total_trips <- trips %>% ungroup() %>%  group_by(trip_week) %>% summarise(n_outward_trips =sum(n_outward_trips,na.rm = TRUE)) %>% mutate(start_station_name = "Total",total_outward_trips = sum(n_outward_trips))
 
+# Add to the working dataset
+trips_to_plot <- bind_rows(trips,total_trips) %>% mutate(start_station_name = as_factor(start_station_name))
 
-cycle_tiles <- trips %>% 
+# remove the stations which haven't had a rental in the latest week of data available.
+trips_to_plot <- trips_to_plot %>% 
   group_by(start_station_name) %>% 
-  filter(any( date_started == max(trips$date_started) & !is.na(n_outward_trips == TRUE) )) %>% 
-  ggplot(aes(x = date_started, y = fct_reorder(start_station_name,total_outward_trips), fill= n_outward_trips)) +
+  filter(any( trip_week == max(trips$trip_week) & !is.na(n_outward_trips == TRUE) )) 
+
+
+
+
+
+# Heatmap  - station counts only ------------------------------------------
+
+
+## Heatmap of weekly total trips, with no total row 
+cycle_tiles <- trips_to_plot %>% filter(start_station_name != "Total") %>% 
+  ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= n_outward_trips)) +
   geom_tile(colour = "white", show.legend = TRUE) +
   scale_fill_distiller(palette = "Spectral",na.value = "gray95", limits =c(1,max(trips$n_outward_trips,na.rm = TRUE))) +
   scale_x_date(date_labels = "%b %Y", date_breaks = "month") +
@@ -134,16 +146,20 @@ cycle_tiles <- trips %>%
 
 cycle_tiles 
 
+
+
+# Barplot - peak rental value in time series  -----------------------------
+
+
 # create barplot for peak bike rentals in a week for 2020
-cycle_bars <- trips %>% 
-  group_by(start_station_name) %>% 
-  filter(any( date_started == max(trips$date_started) & !is.na(n_outward_trips == TRUE) )) %>% 
+cycle_bars <- trips_to_plot %>% 
   summarise(max_n_trips = max(n_outward_trips, na.rm = TRUE),  total_outward_trips = max(total_outward_trips))  %>% 
   group_by(start_station_name) %>% 
+  filter( start_station_name!="Total") %>% 
   ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = max_n_trips)) +
   geom_col() + 
   coord_flip() +
-scale_fill_distiller(palette = "Spectral")  +
+  scale_fill_distiller(palette = "Spectral")  +
   scale_y_continuous(breaks = pretty(trips$total_outward_trips,n=100) )+
   theme(axis.line.x = element_line(colour = "black"),
         axis.ticks.y = element_blank(),
@@ -156,12 +172,90 @@ scale_fill_distiller(palette = "Spectral")  +
 
 cycle_bars
 
-# write the plot
+
+
+
+
+# Heatmap - as % of peak weekly count, inc total --------------------------
+
+# Setting a sensible colour scale, based on the extent of deviation from the time series
+trips_to_plot <- trips_to_plot %>% group_by(start_station_name) %>% 
+  mutate( prop_of_weekly_max  = n_outward_trips / max(n_outward_trips,na.rm = TRUE),
+          prop_of_station_total = n_outward_trips / total_outward_trips)
+
+## Heatmap of weekly total trips, with no total row 
+cycle_tiles_peakprop <- trips_to_plot %>% 
+  ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= prop_of_weekly_max)) +
+  geom_tile(colour = "white", show.legend = TRUE) +
+  scale_fill_distiller(palette = "Spectral",na.value = "gray95") +
+  scale_x_date(date_labels = "%b %Y", date_breaks = "month") +
+  theme(axis.line.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.ticks.y = element_blank(),
+        axis.line.x = element_line(colour = "black"),
+        legend.position = "none",
+        axis.text.y = element_text(size = 12) ,
+        plot.caption = element_text(size = 12),
+        panel.background = element_rect(fill = "white")) +
+  xlab("Date") +
+  labs(title="Edinburgh bike share rentals by station, 2020",
+       subtitle="Bike share check-outs as a proportion of each station's peak weekly total. Stations with no rentals in the latest available data not shown. Gray gaps are where no rentals recorded.",
+       caption="Data from https://edinburghcyclehire.com/open-data/historical. Plot by @diarmuidlloyd, but heavily based on @VictimOfMaths' COVID-19 heatmaps (https://github.com/VictimOfMaths/COVID-19)")
+
+cycle_tiles_peakprop 
+
+
+
+# Barplot - peak rental value in time series, total of all stations set to zero   -----------------------------
+
+cycle_bars_total_zero <- trips_to_plot %>% 
+  mutate(total_outward_trips = ifelse(start_station_name == "Total",0,total_outward_trips)) %>% 
+  summarise(max_n_trips = max(n_outward_trips, na.rm = TRUE),  total_outward_trips = max(total_outward_trips))  %>% 
+  group_by(start_station_name) %>% 
+  ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = max_n_trips)) +
+  geom_col() + 
+  coord_flip() +
+  scale_fill_distiller(palette = "Spectral")  +
+  scale_y_continuous(breaks = pretty(trips$total_outward_trips,n=100) )+
+  theme(axis.line.x = element_line(colour = "black"),
+        axis.ticks.y = element_blank(),
+        axis.title.y = element_blank(),
+        axis.text.y =  element_blank(),
+        legend.position = "none",
+        panel.background = element_rect(fill = "white") ,
+        plot.margin = margin(0, 0, 0, 0, "cm") ) +
+  ylab("Peak weekly hire in 2020")
+
+cycle_bars_total_zero
+
+
+
+## Write the plots -------------------------------------------
+
 png("output/Edinburgh_weekly_bike_rentals_checkouts_2020.png", units="cm", width=45, height=45, res=500)
 montage <- plot_grid(cycle_tiles,cycle_bars, align="h", rel_widths=c(1,0.2))
 montage
 dev.off()
-           
+
+
+png("output/Edinburgh_weekly_bike_rentals_checkouts_peak_proportion_2020.png", units="cm", width=45, height=45, res=500)
+montage <- plot_grid(cycle_tiles_peakprop,cycle_bars_total_zero, align="h", rel_widths=c(1,0.2))
+montage
+dev.off()
+
+
+
+## Sanity check
+
+# Check some gaps. Not sure they are correct.
+trips_to_plot %>% filter(start_station_name == "Cramond Foreshore", trip_week > "2020-02-01") %>% filter(is.na(n_outward_trips) == TRUE)
+#so 16-02-2020 week is NA, implying there were no rentals in that period.
+
+#so let's check the raw data for this time
+data_trips %>% filter(start_station_name == "Cramond Foreshore", started_at > "2020-02-01", started_at < "2020-02-28")
+# And looks like there were indeed no rentals in that time period.
+
+
 
 # Some clear peaks of use, most apparent in the Portobello Kings Road station.
 data %>% filter(start_station_name == "Portobello - Kings Road") %>% 
