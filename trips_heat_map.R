@@ -23,68 +23,21 @@
 
 ## Packages
 library(tidyverse)
-library(httr)
-library(jsonlite)
 library(lubridate)
 library(cowplot)
 library(gt)
 
-
-# Bike trip data, updated daily 
-dataPaths <- c(
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/10.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/09.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/08.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/07.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/06.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/05.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/04.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/03.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/02.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/01.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/12.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/11.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/10.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/09.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/08.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/07.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/06.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/05.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/04.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/03.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/02.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2019/01.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2018/12.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2018/11.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2018/10.json",
-  "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2018/09.json"
-)
-
 # Date ranges ----
-lower_date_cutoff <- as.Date("2019-12-31")
-
-
-## OPTIONAL ------
-## Run if the first time, or if updating. If not, comment out and read in tehe locally saved csv instead.
-#Read in the data. Warning - this file is huge, around 70MB in September 2020.
-# tictoc::tic()
-# data <-map_df(dataPaths,fromJSON, flatten = TRUE)
-# tictoc::toc()
-# data <- data %>% as_tibble()
-# 
-# # Make the file size a bit more manageable
-# data <- data %>% mutate(started_at = as.Date(started_at) , ended_at = as.Date(ended_at))
-# #Sort text to factors.
-# data <- data %>% mutate(start_station_name =  as_factor(start_station_name), end_station_name = as_factor(end_station_name))
-# 
-# #Write the data for local reading - just a convenience if needed down the line
-# write_csv(data, "data/cycle_hire_data.csv")
+# Lower and upper cut offs to consider - set as inclusive.
+lower_date_cutoff <- as.Date("2020-01-01")
+upper_date_cutoff <- Sys.Date()
 
 ## Reading data and counting trips -----
 data <- read_csv("data/cycle_hire_data.csv")
 
 # Select variables of interest.
-data_trips <- data %>% select(c("started_at","ended_at","duration","start_station_name","end_station_name"))
+data_trips <- data %>% 
+  select(c("started_at","ended_at","duration","start_station_name","end_station_name"))
 
 # Count up the number of started at trips for each day, plus the total number of trips for each station
 trips <- data_trips %>% 
@@ -105,7 +58,7 @@ trips <- trips %>%
 
 # Filter date range of interest.
 trips <- trips %>%
-filter(trip_week > lower_date_cutoff)
+filter(trip_week >= lower_date_cutoff, trip_week<= upper_date_cutoff)
   
 #this results in total_outward_trips being NA for the missing dates, whcih causes problems down the line. So,
 # set the NAs to the station's total trips
@@ -193,7 +146,7 @@ trips_to_plot <- trips_to_plot %>% group_by(start_station_name) %>%
 cycle_tiles_peakprop <- trips_to_plot %>% 
   ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= prop_of_weekly_max)) +
   geom_tile(colour = "white", show.legend = TRUE) +
-  scale_fill_distiller(palette = "Spectral",na.value = "gray95") +
+  scale_fill_distiller(palette = "spectral",na.value = "gray95") +
   scale_x_date(date_labels = "%b %Y", date_breaks = "month",sec.axis = dup_axis()) +
   theme(axis.line.y = element_blank(),
         axis.title.y = element_blank(),
