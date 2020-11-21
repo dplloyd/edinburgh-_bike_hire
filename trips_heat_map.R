@@ -70,7 +70,8 @@ trips <-  trips %>% group_by(start_station_name) %>%
 total_trips <- trips %>% ungroup() %>%  group_by(trip_week) %>% summarise(n_outward_trips =sum(n_outward_trips,na.rm = TRUE)) %>% mutate(start_station_name = "Total",total_outward_trips = sum(n_outward_trips))
 
 # Add to the working dataset
-trips_to_plot <- bind_rows(trips,total_trips) %>% mutate(start_station_name = as_factor(start_station_name))
+trips_to_plot <- bind_rows(trips,total_trips) %>% mutate(start_station_name = as_factor(start_station_name),
+                                                         trip_week = as.Date(trip_week))
 
 # remove the stations which haven't had a rental in the latest week of data available.
 trips_to_plot <- trips_to_plot %>% 
@@ -146,7 +147,7 @@ trips_to_plot <- trips_to_plot %>% group_by(start_station_name) %>%
 cycle_tiles_peakprop <- trips_to_plot %>% 
   ggplot(aes(x = trip_week, y = fct_reorder(start_station_name,total_outward_trips), fill= prop_of_weekly_max)) +
   geom_tile(colour = "white", show.legend = TRUE) +
-  scale_fill_distiller(palette = "spectral",na.value = "gray95") +
+  scale_fill_distiller(palette = "Spectral",na.value = "gray95") +
   scale_x_date(date_labels = "%b %Y", date_breaks = "month",sec.axis = dup_axis()) +
   theme(axis.line.y = element_blank(),
         axis.title.y = element_blank(),
@@ -173,7 +174,7 @@ cycle_bars_total_zero <- trips_to_plot %>%
             total_outward_trips_adj = max(total_outward_trips_adj),
             total_outward_trips = max(total_outward_trips))  %>% 
   group_by(start_station_name) %>% 
-  ggplot(aes(y =max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = log10(max_n_trips))) +
+  ggplot(aes(y = max_n_trips, x = fct_reorder(start_station_name,total_outward_trips), fill = log10(max_n_trips))) +
   geom_col() + 
   coord_flip() +
   scale_fill_distiller(palette = "Spectral")  +
@@ -207,37 +208,37 @@ dev.off()
 
 
 ## Sanity check -----
-
-# Check some gaps. Not sure they are correct.
-trips_to_plot %>% filter(start_station_name == "Cramond Foreshore", trip_week > "2020-02-01") %>% filter(is.na(n_outward_trips) == TRUE)
-#so 16-02-2020 week is NA, implying there were no rentals in that period.
-
-#so let's check the raw data for this time
-data_trips %>% filter(start_station_name == "Cramond Foreshore", started_at > "2020-02-01", started_at < "2020-02-28")
-# And looks like there were indeed no rentals in that time period.
-
-
-
-# Some clear peaks of use, most apparent in the Portobello Kings Road station.
-data %>% filter(start_station_name == "Portobello - Kings Road") %>% 
-  group_by(started_at) %>% count(started_at) %>% 
-  ggplot() + geom_line(aes(x = started_at, y = n)) 
-
-# Identifying the days in 2020 which had the most peak use of stations.
-common_peak_dates <- data_trips %>% 
-  group_by(start_station_name) %>% count(started_at) %>% 
-filter(n ==max(n),started_at >= "2020-01-01") %>% 
-  ungroup() %>% 
-  count(started_at) %>% 
-  arrange(desc(n))
-
-
-
-
-# Most common day where stations recorded their peak use in 2020 so far.
-common_peak_dates %>% gt(rowname_col = "row") %>% cols_label(
-  started_at = "Date",
-  n = "Stations"
-)
-                              
+# 
+# # Check some gaps. Not sure they are correct.
+# trips_to_plot %>% filter(start_station_name == "Cramond Foreshore", trip_week > "2020-02-01") %>% filter(is.na(n_outward_trips) == TRUE)
+# #so 16-02-2020 week is NA, implying there were no rentals in that period.
+# 
+# #so let's check the raw data for this time
+# data_trips %>% filter(start_station_name == "Cramond Foreshore", started_at > "2020-02-01", started_at < "2020-02-28")
+# # And looks like there were indeed no rentals in that time period.
+# 
+# 
+# 
+# # Some clear peaks of use, most apparent in the Portobello Kings Road station.
+# data %>% filter(start_station_name == "Portobello - Kings Road") %>% 
+#   group_by(started_at) %>% count(started_at) %>% 
+#   ggplot() + geom_line(aes(x = started_at, y = n)) 
+# 
+# # Identifying the days in 2020 which had the most peak use of stations.
+# common_peak_dates <- data_trips %>% 
+#   group_by(start_station_name) %>% count(started_at) %>% 
+# filter(n ==max(n),started_at >= "2020-01-01") %>% 
+#   ungroup() %>% 
+#   count(started_at) %>% 
+#   arrange(desc(n))
+# 
+# 
+# 
+# 
+# # Most common day where stations recorded their peak use in 2020 so far.
+# common_peak_dates %>% gt(rowname_col = "row") %>% cols_label(
+#   started_at = "Date",
+#   n = "Stations"
+# )
+#                               
 

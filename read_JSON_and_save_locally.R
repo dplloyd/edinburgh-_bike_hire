@@ -23,7 +23,8 @@ library(lubridate)
 
 # Paths to bike trip data, updated daily. Each month a new line should
 # be added.
-dataPaths <- c("https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/10.json", 
+dataPaths <- c("https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/11.json",
+               "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/10.json", 
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/09.json", 
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/08.json", 
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/07.json", 
