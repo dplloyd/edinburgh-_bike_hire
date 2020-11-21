@@ -6,7 +6,13 @@ Last updated: 21st November 2020
 
 A mish mash of various data visualisation and analysis of City of Edinburgh's [cycle hire statistics](https://edinburghcyclehire.com/open-data). I'll add to this as I go.
 
+## Downloading data
+
+Run ```read_JSON_and_save_locally.R``` to download a local version of the data before running the plotting scripts. At time of writing, the resulting csv file is ~90MB.
+
 ## Bike share heatmap
+
+File: ```trips_heat_map.R```
 
 Focusing on 2020, the impact of the 23 March lockdown on bike rentals is clear.  However, rentals pick up for some stations, possibly because of good weather, an unwillingness to use public transport, and quieter streets. Most of the stations seem to get busier as lockdown progresses, but there are clear bands of low use - see for example George Square, the heart of the old University of Edinburgh campus. 
 
