@@ -2,7 +2,7 @@
 
 ## Summary
 
-Last updates: 4th October 2020
+Last updated: 21st November 2020
 
 A mish mash of various data visualisation and analysis of City of Edinburgh's [cycle hire statistics](https://edinburghcyclehire.com/open-data). I'll add to this as I go.
 
