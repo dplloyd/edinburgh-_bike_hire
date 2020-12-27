@@ -2,7 +2,8 @@
 ##
 ## Script name: read_JSON_and_save_locally.R
 ##
-## Purpose of script: Creates a local version of hte most recent JSON data available on Just Eat website. This is faster than reading ## the data from justeat each time I run my analysis/data visualtion scripts
+## Purpose of script: Creates a local version of the most recent JSON data available on Just Eat website. This is faster than reading 
+## the data from justeat each time I run my analysis/data visulisation scripts
 ##
 ## Author: Diarmuid Lloyd
 ##
@@ -23,7 +24,8 @@ library(lubridate)
 
 # Paths to bike trip data, updated daily. Each month a new line should
 # be added.
-dataPaths <- c("https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/11.json",
+dataPaths <- c("https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/12.json",
+               "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/11.json",
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/10.json", 
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/09.json", 
                "https://data.urbansharing.com/edinburghcyclehire.com/trips/v1/2020/08.json", 
