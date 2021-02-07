@@ -60,7 +60,7 @@ trips <- trips %>%
 trips <- trips %>%
 filter(trip_week >= lower_date_cutoff, trip_week<= upper_date_cutoff)
   
-#this results in total_outward_trips being NA for the missing dates, whcih causes problems down the line. So,
+#this results in total_outward_trips being NA for the missing dates, which causes problems down the line. So,
 # set the NAs to the station's total trips
 trips <-  trips %>% group_by(start_station_name) %>% 
   mutate(total_outward_trips = max(total_outward_trips, na.rm = TRUE))
