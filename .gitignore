@@ -2,3 +2,9 @@
 .Rhistory
 .RData
 .Ruserdata
+.scratchpad.R
+.trips_sankey.R
+.data/
+.preparing_data_for_shiny.R
+
+

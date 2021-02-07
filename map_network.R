@@ -21,6 +21,7 @@
 ## Packages
 library(tidyverse)
 library(readr)
+library(geodist)
 
 
 # Read the raw data which we saved using read_JSON_and_save_locally.R
@@ -41,13 +42,13 @@ station_list <-
       station_id = start_station_id,
       station_name = start_station_name,
       station_long =  start_station_longitude,
-      station_lat = start_station_longitude
+      station_lat = start_station_latitude
     ),
     data %>% select(
       station_id = end_station_id,
       station_name = end_station_name,
       station_long = end_station_longitude,
-      station_lat =  end_station_longitude
+      station_lat =  end_station_latitude
     )
   ) %>%
   unique()
@@ -58,8 +59,12 @@ station_list <-
 # The crudest way is to sort the data frame by name, and check for those name station A, B C etc, (or similar)
 station_list <- station_list %>% arrange(by_group = station_name)
 # From a quick check, there are more stations than I anticipated which are "split".
-pairwise_distances <-
-  dist(cbind(station_list$station_long, station_list$station_lat)) %>% as.matrix() %>% as_tibble()
+# pairwise_distances <-
+#   dist(cbind(station_list$station_long, station_list$station_lat)) %>% as.matrix() %>% as_tibble()
+
+longlat <- tibble(long = station_list$station_long, lat = station_list$station_lat)
+
+pairwise_distances <- geodist( x = longlat , measure = "haversine") %>% as.matrix() %>% as_tibble()
 
 number_of_stations <- nrow(station_list)
 
