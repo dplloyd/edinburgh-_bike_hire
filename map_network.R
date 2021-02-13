@@ -2,7 +2,7 @@
 ##
 ## Script name: map_network.R
 ##
-## Purpose of script: Visalise journeys taken between bke hire stations
+## Purpose of script: Visualise journeys taken between bike hire stations
 ##
 ## Author: Diarmuid Lloyd
 ##
@@ -21,7 +21,11 @@
 ## Packages
 library(tidyverse)
 library(readr)
-library(geodist)
+library(sp)
+library(rgdal)
+library(geosphere)
+library(ggmap)
+
 
 
 # Read the raw data which we saved using read_JSON_and_save_locally.R
@@ -35,58 +39,98 @@ data <- read_csv("data/cycle_hire_data.csv")
 
 ### Identifying unique stations ------
 
+# remove the Smarter Station, which is somewhere in england
+data <- data %>% filter(start_station_id != 280, end_station_id != 280)
+
 # Row bind the list of all start stations and end stations, and keep only unique rows
 station_list <-
+  # combine the start and end station location and identifier information
   rbind(
-    data %>% select(
-      station_id = start_station_id,
-      station_name = start_station_name,
-      station_long =  start_station_longitude,
-      station_lat = start_station_latitude
-    ),
-    data %>% select(
-      station_id = end_station_id,
-      station_name = end_station_name,
-      station_long = end_station_longitude,
-      station_lat =  end_station_latitude
-    )
+    data %>%
+      # grab all the start station identifier info
+      select(
+        station_id = start_station_id,
+        station_name = start_station_name,
+        station_long =  start_station_longitude,
+        station_lat = start_station_latitude
+      ),
+    data %>%
+      # grab all the end station identifier info
+      select(
+        station_id = end_station_id,
+        station_name = end_station_name,
+        station_long = end_station_longitude,
+        station_lat =  end_station_latitude
+      )
   ) %>%
+  # keep only the unique rows
   unique()
 
 
-
 ### Aggregating similar stations together ----
-# The crudest way is to sort the data frame by name, and check for those name station A, B C etc, (or similar)
-station_list <- station_list %>% arrange(by_group = station_name)
-# From a quick check, there are more stations than I anticipated which are "split".
-# pairwise_distances <-
-#   dist(cbind(station_list$station_long, station_list$station_lat)) %>% as.matrix() %>% as_tibble()
 
 longlat <- tibble(long = station_list$station_long, lat = station_list$station_lat)
 
-pairwise_distances <- geodist( x = longlat , measure = "haversine") %>% as.matrix() %>% as_tibble()
 
-number_of_stations <- nrow(station_list)
+# convert data to a SpatialPointsDataFrame object
+xy <- SpatialPointsDataFrame(
+  matrix(c(longlat$long,longlat$lat), ncol=2), data.frame(station_id =  station_list$station_id),
+  proj4string=CRS("+proj=longlat +ellps=WGS84 +datum=WGS84"))
 
-colnames(pairwise_distances) <- station_list$station_name
+# use the distm function to generate a geodesic distance matrix in meters
+mdist <- distm(xy)
 
-# This chain starts with the pairwise distances, converts to long=form, while adding in a couple of
-# useful variables, and filtering out all those which are the same station.
-pairwise_distances_long <-
-  pairwise_distances %>% pivot_longer(cols = everything(),
-                                      names_to = "station1",
-                                      values_to = "distance") %>%
-  mutate(
-    station2 = rep(station_list$station_name, each = number_of_stations, times = 1),
-    station1_id = rep(station_list$station_id,
-                      each = 1,
-                      times = number_of_stations),
-    station2_id = rep(station_list$station_id, each = number_of_stations, times = 1)
-  ) %>% 
-  slice_head(n = number_of_stations^2 / 2 ) %>% 
-  arrange(by_group = distance) %>%
-  filter(station1_id != station2_id) 
+# cluster all points using a hierarchical clustering approach
+hc <- hclust(as.dist(mdist), method="complete")
 
-ggplot(pairwise_distances_long) + geom_line(aes(x = seq(1,length(distance)), y = distance))
+# define the distance threshold
+d=50
+
+# define clusters based on a tree "height" cutoff "d" and add them to the SpDataFrame
+xy$clust <- cutree(hc, h=d)
+
+# calculate the centroid of the clusters
+cent <- matrix(ncol=2, nrow=max(xy$clust))
+for (i in 1:max(xy$clust)){
+  # gCentroid from the rgeos package
+  cent[i,] <- rgeos::gCentroid(subset(xy, clust == i))@coords
+}
+
+# convert to tibbles. probably a bit short-sighted, but hey ho
+cent <- cent %>% as_tibble() %>%  
+  rename(long_cluster = V1, lat_cluster = V2) %>% 
+  mutate(clust = seq(1,max(xy$clust)))
+
+xy <- xy %>% 
+  as_tibble() %>%  
+  rename(long = coords.x1, lat = coords.x2)
+
+# Read cluster ids into the main data frame
+
+data <- data %>% 
+  # add in the start station cluster number
+  left_join( xy, by = c("start_station_id" = "station_id") ) %>% rename(start_clust = clust) %>% select(-long,-lat) %>% 
+  # add in the end station cluster number 
+  left_join( xy, by = c("end_station_id" = "station_id") ) %>% rename(end_clust = clust) %>% select(-long,-lat) %>% 
+  # add in the start cluster center coordinates
+  left_join( cent, by = c("start_clust" = "clust") ) %>% rename(start_clust_long = long_cluster, start_clust_lat = lat_cluster) %>% 
+  # add in the end cluster center coordinates
+  left_join( cent, by = c("end_clust" = "clust") ) %>% rename(end_clust_long = long_cluster, end_clust_lat = lat_cluster) 
+
+### Visualise the stations on a map of Edinburgh, and the associated clusters
+# store bounding box coordinates
+edi_bb <- c(left = -3.425166,
+            bottom =  55.890596,
+            right = -3.014034 , 
+            top =  55.995832)
+
+  edinburgh_stamen <- get_stamenmap(bbox = edi_bb,
+                                zoom = 12, maptype="toner-lite", crop=FALSE)
+ggmap(edinburgh_stamen)
+
+
+
+### Counting the journeys between clusters
+
 
 
