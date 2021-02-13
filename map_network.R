@@ -25,6 +25,7 @@ library(sp)
 library(rgdal)
 library(geosphere)
 library(ggmap)
+library(igraph)
 
 
 
@@ -84,7 +85,7 @@ mdist <- distm(xy)
 hc <- hclust(as.dist(mdist), method="complete")
 
 # define the distance threshold
-d=50
+d=500
 
 # define clusters based on a tree "height" cutoff "d" and add them to the SpDataFrame
 xy$clust <- cutree(hc, h=d)
@@ -117,20 +118,78 @@ data <- data %>%
   # add in the end cluster center coordinates
   left_join( cent, by = c("end_clust" = "clust") ) %>% rename(end_clust_long = long_cluster, end_clust_lat = lat_cluster) 
 
-### Visualise the stations on a map of Edinburgh, and the associated clusters
+#read cluster Ids into the station list
+station_list <- station_list %>% left_join(xy, by = "station_id") %>% select(-long,-lat)
+
+
+
+
+
+### Counting the journeys between clusters ----
+
+#matrix of start and end clusters
+df <- data %>% select(start_clust,end_clust) 
+
+# Count the total number of trips made between each station
+total_trips <- data.frame(t(apply(df,1,sort))) %>% 
+  group_by_all(.) %>% 
+  count()
+
+# rename as source and target - although here we're still looking at total trips, so not
+# directional
+total_trips <- total_trips %>% 
+  rename(source = X1, target = X2) 
+
+
+##### PLOTTING ----
+
+### Visualise the stations on a map of Edinburgh, and the associated clusters ----
 # store bounding box coordinates
 edi_bb <- c(left = -3.425166,
             bottom =  55.890596,
             right = -3.014034 , 
-            top =  55.995832)
+            top =  56)
 
-  edinburgh_stamen <- get_stamenmap(bbox = edi_bb,
-                                zoom = 12, maptype="toner-lite", crop=FALSE)
-ggmap(edinburgh_stamen)
+edinburgh_stamen <- get_stamenmap(bbox = edi_bb,
+                                  zoom = 11, maptype="toner-lines", crop=FALSE)
+map <- ggmap(edinburgh_stamen, extent = "normal")
+
+map_clusters_base <- map +
+  #geom_point(data = station_list, aes(station_long, station_lat), alpha = 0.5) +
+  geom_point(data = cent, aes(long_cluster, lat_cluster, colour = (clust)), alpha = 0.5)
 
 
 
-### Counting the journeys between clusters
+
+# Filter out those trips which are closed loops on the same cluster
+total_trips_paths_only <-
+  total_trips %>% filter(source != target) %>%
+  filter(n >= 100)
+
+col.1 <- adjustcolor("orange red", alpha=0.4)
+col.2 <- adjustcolor("orange", alpha=0.4)
+edge.pal <- colorRampPalette(c(col.1, col.2), alpha = TRUE)
+edge.col <- edge.pal(100)
+
+# this should be functioned...
+trips_to_plot <- total_trips_paths_only %>% arrange(-n)
 
 
+map_clusters <- map_clusters_base
+for(i in 1:nrow(trips_to_plot))  {
+  node1 <- cent[cent$clust == trips_to_plot[i,]$source,]
+  node2 <- cent[cent$clust == trips_to_plot[i,]$target,]
+  
+  arc <- gcIntermediate( c(node1[1,]$long_cluster, node1[1,]$lat_cluster), 
+                         c(node2[1,]$long_cluster, node2[1,]$lat_cluster), 
+                         n=50, addStartEnd=TRUE ) %>% 
+    as_tibble()
+    
+  edge.ind <- ceiling(100*trips_to_plot[i,]$n / max(trips_to_plot$n))
+  
+ map_clusters <- map_clusters +  geom_path(data = arc, aes(x = lon, y = lat), col=edge.col[edge.ind], lwd=.1)
+ 
+}
+
+map_clusters
 
