@@ -26,6 +26,7 @@ library(rgdal)
 library(geosphere)
 library(ggmap)
 library(igraph)
+library(ggmapstyles)
 
 
 
@@ -85,7 +86,7 @@ mdist <- distm(xy)
 hc <- hclust(as.dist(mdist), method="complete")
 
 # define the distance threshold
-d=500
+d=2
 
 # define clusters based on a tree "height" cutoff "d" and add them to the SpDataFrame
 xy$clust <- cutree(hc, h=d)
@@ -141,25 +142,50 @@ total_trips <- total_trips %>%
   rename(source = X1, target = X2) 
 
 
+
+
+
+
 ##### PLOTTING ----
 
 ### Visualise the stations on a map of Edinburgh, and the associated clusters ----
+
+
+# STAMENMAPS ----
 # store bounding box coordinates
-edi_bb <- c(left = -3.425166,
-            bottom =  55.890596,
-            right = -3.014034 , 
-            top =  56)
+# edi_bb <- c(left = -3.425166,
+#             bottom =  55.890596,
+#             right = -3.014034 , 
+#             top =  56)
+# 
+# edinburgh_stamen <- get_stamenmap(bbox = edi_bb,
+#                                   zoom = 11, maptype="toner", crop=FALSE)
+# map_stamen <- ggmap(edinburgh_stamen, extent = "normal")
+# 
+# map_clusters_stamen <- map_stamen +
+#   #geom_point(data = station_list, aes(station_long, station_lat), alpha = 0.5) +
+#   geom_point(data = cent, aes(long_cluster, lat_cluster), colour = "orange", alpha = 0.5, size = 0.1)
+# 
+# map_clusters_stamen
 
-edinburgh_stamen <- get_stamenmap(bbox = edi_bb,
-                                  zoom = 11, maptype="toner-lines", crop=FALSE)
-map <- ggmap(edinburgh_stamen, extent = "normal")
 
-map_clusters_base <- map +
+## SNAZZYMAPS ----
+# https://github.com/dr-harper/ggmapstyles
+
+api_key <-  readr::read_csv("api.txt", col_names = FALSE) 
+api_key <- api_key$X1
+
+map <- get_snazzymap(center = c(lon = -3.225, lat = 55.95),
+                     mapRef = "https://snazzymaps.com/style/28442/monomap",
+                     zoom = 11, scale = 2)
+
+(map_snazzy <- ggmap(map))
+
+map_clusters_snazzy <- map_snazzy +
   #geom_point(data = station_list, aes(station_long, station_lat), alpha = 0.5) +
-  geom_point(data = cent, aes(long_cluster, lat_cluster, colour = (clust)), alpha = 0.5)
+  geom_point(data = cent, aes(long_cluster, lat_cluster), colour = "seagreen", alpha = 0.5, size = 1)
 
-
-
+map_clusters_snazzy
 
 # Filter out those trips which are closed loops on the same cluster
 total_trips_paths_only <-
@@ -172,24 +198,58 @@ edge.pal <- colorRampPalette(c(col.1, col.2), alpha = TRUE)
 edge.col <- edge.pal(100)
 
 # this should be functioned...
+
+# plot edges and nodes
 trips_to_plot <- total_trips_paths_only %>% arrange(-n)
 
 
-map_clusters <- map_clusters_base
+
+
+map_clusters <- map_clusters_snazzy
+
+map_clusters <- ggplot()
 for(i in 1:nrow(trips_to_plot))  {
-  node1 <- cent[cent$clust == trips_to_plot[i,]$source,]
-  node2 <- cent[cent$clust == trips_to_plot[i,]$target,]
   
-  arc <- gcIntermediate( c(node1[1,]$long_cluster, node1[1,]$lat_cluster), 
-                         c(node2[1,]$long_cluster, node2[1,]$lat_cluster), 
-                         n=50, addStartEnd=TRUE ) %>% 
-    as_tibble()
-    
-  edge.ind <- ceiling(100*trips_to_plot[i,]$n / max(trips_to_plot$n))
   
- map_clusters <- map_clusters +  geom_path(data = arc, aes(x = lon, y = lat), col=edge.col[edge.ind], lwd=.1)
+ node1 <- cent[cent$clust == trips_to_plot[i,]$source,]
+ node2 <- cent[cent$clust == trips_to_plot[i,]$target,]
+arc <- rbind(node1,node2) %>% select(lon = long_cluster, lat = lat_cluster)
+
+ # arc <- gcIntermediate( c(node1[1,]$long_cluster, node1[1,]$lat_cluster),
+ #                      c(node2[1,]$long_cluster, node2[1,]$lat_cluster),
+ #                      n=50, addStartEnd=TRUE ) %>%
+ #as_tibble()
+
  
+ 
+ edge.ind <- ceiling(100*trips_to_plot[i,]$n / max(trips_to_plot$n))
+ map_clusters <- map_clusters +  geom_path(data = arc, aes(x = lon, y = lat), col= "black", lwd=.1)
+
 }
 
-map_clusters
+map_clusters 
+
+#alternative way of getting 
+
+
+####  Other graphing stuff -----
+
+
+
+
+# Add cluster centres with a little circle around it
+circles_to_plot <- dismo::circles(cent %>% select(-clust), d=d, lonlat = T)
+
+# plot
+  plot(circles_to_plot@presence, axes=T)
+  plot(xy %>% select(long,lat), add=F)
+  
+
+basemap2 + geom_sf(data = circles_to_plot@presence, aes(long_cluster, lat_cluster)) 
+
+# networks
+#trips_graph <- as_tbl_graph(total_trips, directed = TRUE)
+
+
+
 
