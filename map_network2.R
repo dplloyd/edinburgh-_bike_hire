@@ -27,6 +27,7 @@ library(geosphere)
 library(ggmap)
 library(igraph)
 library(ggmapstyles)
+library(gganimate)
 
 
 
@@ -68,7 +69,18 @@ station_list <-
   # keep only the unique rows
 station_list <- station_list[ !duplicated(station_list$station_id),]
 
-### Aggregating similar stations together ----
+# Determine the date of the first trip from each station
+station_first_trip <-
+  data %>% 
+  group_by(start_station_id) %>% 
+  arrange(started_at) %>% 
+  distinct(start_station_id, .keep_all = TRUE) %>%
+  select(station_id = start_station_id, first_trip_date = started_at)
+
+#match this in to station_list
+station_list <- station_list %>% left_join(station_first_trip, by = "station_id")
+
+ ### Aggregating similar stations together ----
 
 longlat <- tibble(long = station_list$station_long, lat = station_list$station_lat)
 
@@ -93,39 +105,97 @@ count_trips <- function(data, start, end){
                     end_station_id = end)  
 
 # Count the total number of trips made between each station, direction matters here
-total_trips <- df %>% 
+total_trips_tmp <- df %>% 
   group_by(start_station_id,end_station_id) %>% 
   count() 
 
 # rename as source and target - although here we're still looking at total trips, so not
 # directional
-total_trips <- total_trips %>% 
+total_trips_tmp <- total_trips_tmp %>% 
   rename(source = start_station_id, target = end_station_id) 
 
 #graph <- graph_from_data_frame(total_trips, directed=FALSE) 
-# create levels based on all station names. Sort these in order of first appearence
-station_id_level <-  sort(station_list$station_id) %>% unique()
+# create levels based on all station names. Sort these in order of first appearance
+station_id_level <- station_list %>%   arrange(first_trip_date) %>% unique() %>% select(station_id) %>% pull(station_id)
 # Adjust the 'to' and 'from' factor levels so they are equal
 # to this complete list of node names
-total_trips <- total_trips %>% mutate(source = factor(source, levels = station_id_level),
+total_trips_tmp2 <- total_trips_tmp %>% mutate(source = factor(source, levels = station_id_level),
                        target = factor(target, levels = station_id_level))
 
-return(total_trips)
+return(total_trips_tmp2)
 }
 
-total_trips <- count_trips(data, "start_station_id", "end_station_id")
+
+# Calculate total trips on all data held
+total_trips <- count_trips(data, start = "start_station_id", end =  "end_station_id")
+# get the highest number of trips made between stations
+maxtrips <- max(total_trips$n)
+
+# Function to filter data, count trips, and plot before writing
+write_plot <- function(data,start,end,date_thresh){
+  total_trips <-   count_trips(data, start , end )
+  
+  plot_to_save <- ggplot(total_trips, aes(x = source, y = target, fill = log(n))) +
+    geom_raster() +
+    theme_minimal() +
+    scale_x_discrete(drop = FALSE) +
+    scale_y_discrete(drop = FALSE) + # to ensure all factors are shown.
+    theme( axis.text = element_blank(),
+           aspect.ratio = 1) +
+    scale_fill_viridis_c(limits = c(0, log(maxtrips)), option = "D")
+  
+  png(paste0("output/geom_raster_plots/bike_trips_raster_up_to_",date_thresh,".png"))
+  print(plot_to_save)
+  dev.off()
+  
+}
 
 
 # Visualising the trips between stations
 
-ggplot(total_trips, aes(x = source, y = target, fill =log(n))) +
+ggplot(total_trips, aes(x = source, y = target, fill =(n))) +
   geom_raster() +
-  theme_bw() +
-  theme(
-    # Rotate the x-axis lables so they are legible
-    axis.text.x = element_text(angle = 270, hjust = 0),
-    # Force the plot into a square aspect ratio
-    aspect.ratio = 1,
-    # Hide the legend (optional)
-    legend.position = "none") 
+  theme_minimal() +
+  theme( axis.text = element_blank(),
+         aspect.ratio = 1) +
+  scale_fill_viridis_c()
+  
 
+
+
+#Building frames
+
+date_thresh_list <- tibble(dates = seq.Date(from = as.Date("2018-10-01"), to = as.Date("2021-01-31"), by = "month"),
+                           date_thresh_reference = as.character(seq(from = 1, by = 1, length.out = length(dates))))
+
+
+
+all_data <-
+  lapply(
+    date_thresh_list$dates,
+    FUN = function(x)
+      write_plot(data %>% filter(as.Date(started_at) <= x) , start = "start_station_id", end =  "end_station_id",date_thresh = x)
+  )
+
+# all_data_unpacked <- bind_rows(all_data, .id = "date_thresh_reference") %>% left_join(date_thresh_list, by = "date_thresh_reference")
+
+# 
+# plot_to_animate <- ggplot(all_data_unpacked, aes(x = source, y = target, fill = n)) +
+#   geom_raster() +
+#   theme_minimal() +
+#   theme( axis.text = element_blank(),
+#          aspect.ratio = 1) +
+#   scale_fill_viridis_c()
+# 
+# anim <- plot_to_animate +
+#   transition_states(dates,
+#                     transition_length = 2,
+#                     state_length = 1) +
+#   ease_aes('cubic-in-out') +
+#   ggtitle('{closest_state}')  +
+#   exit_disappear() +
+#   enter_appear()
+# 
+# anim2 <- animate(anim, nframes = length(date_thresh_list$dates)+70, end_pause = 2
+#                  )
+# anim2
